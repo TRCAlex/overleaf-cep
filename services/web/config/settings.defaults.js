@@ -1010,7 +1010,7 @@ module.exports = {
     importProjectFromGithubModalWrapper: [],
     importProjectFromGithubMenu: [],
     editorLeftMenuSync: [],
-    editorLeftMenuManageTemplate: [],
+    editorLeftMenuManageTemplate: ['@/features/editor-left-menu/components/actions-manage-template'],
     menubarExtraComponents: [],
     oauth2Server: [],
     managedGroupSubscriptionEnrollmentNotification: [],
@@ -1067,6 +1067,7 @@ module.exports = {
     'authentication/ldap',
     'authentication/saml',
     'authentication/oidc',
+    'template-gallery',
   ],
   viewIncludes: {},
 

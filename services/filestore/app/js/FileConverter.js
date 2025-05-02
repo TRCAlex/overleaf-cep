@@ -6,7 +6,7 @@ import Errors from './Errors.js'
 
 const { ConversionError } = Errors
 
-const APPROVED_FORMATS = ['png']
+const APPROVED_FORMATS = ['png', 'jpg']
 const FOURTY_SECONDS = 40 * 1000
 const KILL_SIGNAL = 'SIGTERM'
 
@@ -35,16 +35,14 @@ async function convert(sourcePath, requestedFormat) {
 }
 
 async function thumbnail(sourcePath) {
-  const width = '260x'
-  return await convert(sourcePath, 'png', [
+  const width = '548x'
+  return await _convert(sourcePath, 'jpg', [
     'convert',
     '-flatten',
     '-background',
     'white',
     '-density',
     '300',
-    '-define',
-    `pdf:fit-page=${width}`,
     `${sourcePath}[0]`,
     '-resize',
     width,
@@ -52,16 +50,14 @@ async function thumbnail(sourcePath) {
 }
 
 async function preview(sourcePath) {
-  const width = '548x'
-  return await convert(sourcePath, 'png', [
+  const width = '794x'
+  return await _convert(sourcePath, 'jpg', [
     'convert',
     '-flatten',
     '-background',
     'white',
     '-density',
     '300',
-    '-define',
-    `pdf:fit-page=${width}`,
     `${sourcePath}[0]`,
     '-resize',
     width,
