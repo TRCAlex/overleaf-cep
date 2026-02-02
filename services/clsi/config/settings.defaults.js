@@ -65,7 +65,7 @@ module.exports = {
   project_cache_length_ms: 1000 * 60 * 60 * 24,
   parallelFileDownloads: process.env.FILESTORE_PARALLEL_FILE_DOWNLOADS || 1,
   filestoreDomainOveride: process.env.FILESTORE_DOMAIN_OVERRIDE,
-  texliveImageNameOveride: process.env.TEX_LIVE_IMAGE_NAME_OVERRIDE,
+  texliveImageNameOveride: process.env.TEX_LIVE_DOCKER_IMAGE_ROOT,
   texliveOpenoutAny: process.env.TEXLIVE_OPENOUT_ANY,
   texliveMaxPrintLine: process.env.TEXLIVE_MAX_PRINT_LINE,
   enablePdfCaching: process.env.ENABLE_PDF_CACHING === 'true',
