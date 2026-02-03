@@ -80,7 +80,7 @@ async function duplicate(owner, originalProjectId, newProjectName, tags = []) {
   const newProject = await ProjectCreationHandler.promises.createBlankProject(
     owner._id,
     newProjectName,
-    { segmentation }
+    { segmentation, imageName: originalProject.imageName }
   )
 
   let prepareClsiCacheInBackground = Promise.resolve()
