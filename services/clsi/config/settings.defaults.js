@@ -95,7 +95,7 @@ if (process.env.ALLOWED_COMPILE_GROUPS) {
   }
 }
 
-if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
+if ((process.env.DOCKER_RUNNER && process.env.SANDBOXED_COMPILES) === 'true') {
   module.exports.clsi = {
     dockerRunner: true,
     docker: {
@@ -168,6 +168,99 @@ if ((process.env.DOCKER_RUNNER || process.env.SANDBOXED_COMPILES) === 'true') {
   if (process.env.ALLOWED_IMAGES) {
     try {
       module.exports.clsi.docker.allowedImages =
+        process.env.ALLOWED_IMAGES.split(' ')
+    } catch (error) {
+      console.error(error, 'could not apply allowed images setting')
+      process.exit(1)
+    }
+  }
+
+  module.exports.path.synctexBaseDir = () => '/compile'
+
+  module.exports.path.sandboxedCompilesHostDirCompiles =
+    process.env.SANDBOXED_COMPILES_HOST_DIR_COMPILES ||
+    process.env.SANDBOXED_COMPILES_HOST_DIR ||
+    process.env.COMPILES_HOST_DIR
+  if (!module.exports.path.sandboxedCompilesHostDirCompiles) {
+    throw new Error(
+      'SANDBOXED_COMPILES enabled, but SANDBOXED_COMPILES_HOST_DIR_COMPILES not set'
+    )
+  }
+
+  module.exports.path.sandboxedCompilesHostDirOutput =
+    process.env.SANDBOXED_COMPILES_HOST_DIR_OUTPUT ||
+    process.env.OUTPUT_HOST_DIR
+  if (!module.exports.path.sandboxedCompilesHostDirOutput) {
+    // TODO(das7pad): Enforce in a future major version of Server Pro.
+    // throw new Error(
+    //   'SANDBOXED_COMPILES enabled, but SANDBOXED_COMPILES_HOST_DIR_OUTPUT not set'
+    // )
+  }
+}
+
+if ((process.env.KUBERNETES_RUNNER && process.env.SANDBOXED_COMPILES) === 'true') {
+  module.exports.clsi = {
+    k8sRunner: true,
+    k8s: {
+      runtime: process.env.KUBERNETES_RUNTIME,
+      image:
+        process.env.TEXLIVE_IMAGE ||
+        process.env.TEX_LIVE_KUBERNETES_IMAGE ||
+        'quay.io/sharelatex/texlive-full:2017.1',
+      env: {
+        HOME: '/tmp',
+        CLSI: 1,
+      },
+      user: process.env.TEXLIVE_IMAGE_USER || 'www-data',
+      volumeClaim: process.env.OVERLEAF_DATA_VOLUMECLAIM_NAME
+    },
+    expireProjectAfterIdleMs: 24 * 60 * 60 * 1000,
+    checkProjectsIntervalMs: 10 * 60 * 1000,
+  }
+
+  try {
+    // Override individual kubernetes settings using path-based keys, e.g.:
+    // compileGroupDockerConfigs = {
+    //    priority: { 'HostConfig.CpuShares': 100 }
+    //    beta: { 'dotted.path.here', 'value'}
+    // }
+    const compileGroupConfig = JSON.parse(
+      process.env.COMPILE_GROUP_K8S_CONFIGS || '{}'
+    )
+    // // Automatically clean up wordcount and synctex containers
+    // const defaultCompileGroupConfig = {
+    //   wordcount: { 'HostConfig.AutoRemove': true },
+    //   synctex: { 'HostConfig.AutoRemove': true },
+    //   'synctex-output': { 'HostConfig.AutoRemove': true },
+    // }
+    module.exports.clsi.k8s.compileGroupConfig = Object.assign(
+      // defaultCompileGroupConfig,
+      compileGroupConfig
+    )
+  } catch (error) {
+    console.error(error, 'could not apply compile group docker configs')
+    process.exit(1)
+  }
+
+  let seccompProfilePath
+  try {
+    seccompProfilePath = Path.resolve(__dirname, '../seccomp/clsi-profile.json')
+    module.exports.clsi.k8s.seccomp_profile =
+      process.env.SECCOMP_PROFILE ||
+      JSON.stringify(
+        JSON.parse(require('node:fs').readFileSync(seccompProfilePath))
+      )
+  } catch (error) {
+    console.error(
+      error,
+      `could not load seccomp profile from ${seccompProfilePath}`
+    )
+    process.exit(1)
+  }
+
+  if (process.env.ALLOWED_IMAGES) {
+    try {
+      module.exports.clsi.k8s.allowedImages =
         process.env.ALLOWED_IMAGES.split(' ')
     } catch (error) {
       console.error(error, 'could not apply allowed images setting')

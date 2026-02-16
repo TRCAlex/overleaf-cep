@@ -12,7 +12,11 @@ const logger = require('@overleaf/logger')
 if ((Settings.clsi != null ? Settings.clsi.dockerRunner : undefined) === true) {
   commandRunnerPath = './DockerRunner'
 } else {
+  if ((Settings.clsi != null ? Settings.clsi.k8sRunner : undefined) === true) {
+  commandRunnerPath = './KubernetesRunner'
+} else {
   commandRunnerPath = './LocalCommandRunner'
+}
 }
 logger.debug({ commandRunnerPath }, 'selecting command runner for clsi')
 const CommandRunner = require(commandRunnerPath)
