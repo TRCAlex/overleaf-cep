@@ -17,8 +17,7 @@ let containerMonitorTimeout
 let containerMonitorInterval
 
 const KubernetesRunner = {
-  kubeInit(){
-
+  init() {
     const kubeconfig = new Kubernetes.KubeConfig();
     try {
       logger.info('Loading in-cluster config')
@@ -37,12 +36,26 @@ const KubernetesRunner = {
 
     this.batchApi = kubeconfig.makeApiClient(Kubernetes.BatchV1Api);
     this.coreApi = kubeconfig.makeApiClient(Kubernetes.CoreV1Api);
+    this._initialized = true;
+    this.seLinuxLevel = null
+
+    // Load SELinux config
+    this._loadSELinuxConfig()
+      .then(() => {
+        logger.info({ seLinuxLevel: this.seLinuxLevel }, 'SELinux config ready')
+      })
+      .catch(err => {
+        logger.warn({ err }, 'Could not load SELinux config')
+      })
   },
 
-  async run(projectId, command, directory, image, timeout, environment, compileGroup, callback) {
-    this.kubeInit()
-    logger.info({ projectId }, 'KubernetesRunner: starting compile job');
-        
+  _ensureInit() {
+    if (!this._initialized) {
+      this.init();
+    }
+  },
+
+  run(projectId, command, directory, image, timeout, environment, compileGroup, callback) {
     command = command.map(arg =>
       arg.toString().replace('$COMPILE_DIR', `/compiles`) // Check to sync with compileDir in options()
     )
@@ -83,6 +96,9 @@ const KubernetesRunner = {
       )
     }
 
+    KubernetesRunner._ensureInit()
+    logger.info({ projectId }, 'KubernetesRunner: starting compile job');
+
     // const volumes = { [directory]: '/compile' }
     // if (
     //   compileGroup === 'synctex' ||
@@ -91,14 +107,14 @@ const KubernetesRunner = {
     // ) {
     //   volumes[directory] += ':ro'
     // }
-    
-    const options = await KubernetesRunner._getJobOptions(
+    const options = KubernetesRunner._getJobOptions(
       command,
       image,
       timeout,
       environment,
       compileGroup
     )
+
     const fingerprint = KubernetesRunner._fingerprintJob(options)
     const name = `project-${projectId}-${fingerprint}`.toLowerCase().substring(0, 63);
     options.name = name
@@ -129,6 +145,7 @@ const KubernetesRunner = {
           })
         } else {
           callback(error, output)
+          //// {"name":"clsi","hostname":"overleaf-0","pid":200,"level":50,"error":{"message":"callback is not a function","name":"TypeError","stack":"TypeError: callback is not a function\n    at /overleaf/services/clsi/app/js/KubernetesRunner.js:131:11\n    at /overleaf/node_modules/lodash/lodash.js:10118:25\n    at Object._runAndWaitForJob (/overleaf/services/clsi/app/js/KubernetesRunner.js:179:7)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","info":{}},"projectId":"6981acd067f1cd5e41f0b174-6981a7f867f1cd5e41f0b120","msg":"KubernetesRunner error","time":"2026-02-16T07:35:02.980Z","v":0}
         }
       }
     )
@@ -137,7 +154,7 @@ const KubernetesRunner = {
   },
 
   kill(name, callback) {
-    this.kubeInit()
+    this._ensureInit()
     logger.debug({ name }, 'sending kill signal to job')
     this.destroyJob(name)
   },
@@ -154,7 +171,8 @@ const KubernetesRunner = {
 
       // Wait for Job
       const podName = await this._waitForJob(name);
-      const exitCode = await this._waitForCompletion(podName, timeout);
+      logger.info({ podName, timeout }, 'Pod found, waiting for completion')
+      const exitCode = await this._waitForCompletion(podName);
 
       // Get logs
       const logs = await this._getLogs(podName);
@@ -253,16 +271,16 @@ const KubernetesRunner = {
     };
 
     try {
-      await this.batchApi.createNamespacedJob(this.namespace, job);
-      logger.info({ name }, 'Job created successfully')
+      const createResponse = await this.batchApi.createNamespacedJob(this.namespace, job);
+      logger.info({ name, statuscode: createResponse.response?.statusCode }, 'Job created successfully')
       callback(null)
     } catch(err) {
-      logger.error({ err, name }, 'Failed to create job')
+      logger.error({ err, name, statusCode: err?.response?.statusCode }, 'Failed to create job')
       callback(err)
     }
   },
 
-  async _waitForJob(name, maxWaitSeconds = 30) { 
+  async _waitForJob(name, maxWaitSeconds = 300) { 
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitSeconds * 1000) {
@@ -286,7 +304,7 @@ const KubernetesRunner = {
     throw new Error(`Pod for job ${name} has not been created`);
   },
 
-  async _waitForCompletion(podName, timeoutMs = 3000) {
+  async _waitForCompletion(podName, timeoutMs = 300000) {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs){
@@ -308,8 +326,13 @@ const KubernetesRunner = {
 
       // Check for container crash
       const waiting = containerStatuses[0]?.state?.waiting;
-      if (waiting?.reason === 'CrashLoopBackOff' || waiting?.reason === 'ImagePullBackOff') {
+      if (waiting?.reason === 'CrashLoopBackOff') {
         throw new Error(`Pod failed: ${waiting.reason}`);
+      }
+
+      // Something causes the image to fail being pulled, but on retry it succeeds.
+      if (waiting?.reason === 'ImagePullBackOff') {
+        logger.warn({ podName }, 'Image pull backing off, waiting for K8s retry...')
       }
 
       await this._sleep(1000);
@@ -323,7 +346,7 @@ const KubernetesRunner = {
     return response.body
   },
 
-  async _getJobOptions(
+  _getJobOptions(
     command,
     image,
     timeout,
@@ -348,8 +371,6 @@ const KubernetesRunner = {
     // read selinuxoptions from pod security context
     // needed for mapping volumes to multiple containers
     //const seLinuxLevel = process.env.SELINUX_OPTIONS_LEVEL
-    await KubernetesRunner._loadSELinuxConfig()
-
     env.PATH = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/texlive/${year}/bin/x86_64-linux/`
     const options = {
       Cmd: command,
@@ -441,8 +462,13 @@ const KubernetesRunner = {
   }
 }
 
+// Initialise k8s config
+KubernetesRunner.init()
+
 module.exports = KubernetesRunner;
 module.exports.promises = {
-  run: (...args) => KubernetesRunner.run(...args),
+  // run: (...args) => KubernetesRunner.run(...args),
+  // kill: (...args) => KubernetesRunner.kill(...args)
+  run: promisify(KubernetesRunner.run),
   kill: promisify(KubernetesRunner.kill)
 }
