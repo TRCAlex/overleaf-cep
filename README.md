@@ -82,3 +82,41 @@ folder are added.
 The code in this repository is released under the GNU AFFERO GENERAL PUBLIC LICENSE, version 3. A copy can be found in the [`LICENSE`](LICENSE) file.
 
 Copyright (c) Overleaf, 2014-2025.
+
+----------------------------------------
+
+# KubernetesRunner
+
+A script has been added to allow overleaf to communicate with the Kubernetes API of the cluster it is currently located in.  
+Overleaf will launch kubernetes jobs attached to a pvc as a sandbox environment to compile projects.  
+This is an alternative to the native, already builtin, docker sandboxcompiles.  
+
+## Requirements
+
+The following objects are needed in order for overleaf to be able to create jobs through the Kubernetes API.
+
+1. Service Account in Kubernetes cluster named "overleaf", with the following permissions:  
+Service account has to be in use by the overleaf pod as well.  
+**NOTE** Currently service account has to be named "overleaf", making this dynamic is WIP.
+    * "create", "get", "list", "watch", "delete" on "batch" api for resource "jobs"
+    * "get", "list", "watch" on resource "pods"
+    * "get" on resources "pods/logs" & "pods/status" 
+2. PersistentVolumeClaim with RWX for the overleaf pod to share data with job pods.
+3. Environment variables on the overleaf pod:
+    * **POD_NAME** (required): name of the current overleaf pod; needed to read seLinuxOptions.  
+    **NOTE**: This restricts potential use of StatefulSets/scalability. Removing this ENV is WIP.
+    * **SANDBOXED_COMPILES**: set "true" to enable sandboxed compiles
+    * **KUBERNETES_RUNNER**: set "true" to enable usage of Kubernetes Jobs as sandboxes. Alternative options is **DOCKER_RUNNER**.
+    * **SANDBOXED_COMPILES_HOST_DIR** (required): path to the compiles/ dir relative to the PVC mountpoint.  
+    example: PVC mountPath = /var/lib/overleaf/ => SANDBOXED_COMPILES_HOST_DIR = data/compiles/
+    * **SANDBOXED_COMPILES_HOST_DIR_OUTPUT** (required): path to the output/ dir relative to the PVC mountpoint.  
+    example: PVC mountPath = /var/lib/overleaf/ => SANDBOXED_COMPILES_HOST_DIR = data/output/
+    * **ALL_TEX_LIVE_DOCKER_IMAGES** (required): string of docker images allowed to be used as compile images in sandboxes, seperated by comma.  
+    example: "texlive:latest-full,texlive:TL2024-historic,texlive:TL2023-historic"  
+    example: "texlive/texlive:lates-full,texlive/texlive:TL2024-historic"
+    * **TEX_LIVE_DOCKER_IMAGE** (required?): Default image for compile jobs.
+    * **TEX_LIVE_DOCKER_IMAGE_ROOT** (optional): general repository where **ALL_TEX_LIVE_DOCKER_IMAGES** are located.  
+    example: "texlive"
+    * **OVERLEAF_DATA_VOLUMECLAIM_NAME** (required): name of the persistent volumeclaim in kubernetes that overleaf uses to share data with job pods.
+
+
