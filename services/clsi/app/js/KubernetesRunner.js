@@ -13,9 +13,6 @@ const os = require('os')
 const ONE_HOUR_IN_MS = 60 * 60 * 1000
 logger.debug('using kubernetes runner')
 
-let containerMonitorTimeout
-let containerMonitorInterval
-
 const KubernetesRunner = {
   init() {
     const kubeconfig = new Kubernetes.KubeConfig();
@@ -99,14 +96,6 @@ const KubernetesRunner = {
     KubernetesRunner._ensureInit()
     logger.info({ projectId }, 'KubernetesRunner: starting compile job');
 
-    // const volumes = { [directory]: '/compile' }
-    // if (
-    //   compileGroup === 'synctex' ||
-    //   compileGroup === 'synctex-output' ||
-    //   compileGroup === 'wordcount'
-    // ) {
-    //   volumes[directory] += ':ro'
-    // }
     const options = KubernetesRunner._getJobOptions(
       command,
       image,
@@ -145,11 +134,10 @@ const KubernetesRunner = {
           })
         } else {
           callback(error, output)
-          //// {"name":"clsi","hostname":"overleaf-0","pid":200,"level":50,"error":{"message":"callback is not a function","name":"TypeError","stack":"TypeError: callback is not a function\n    at /overleaf/services/clsi/app/js/KubernetesRunner.js:131:11\n    at /overleaf/node_modules/lodash/lodash.js:10118:25\n    at Object._runAndWaitForJob (/overleaf/services/clsi/app/js/KubernetesRunner.js:179:7)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","info":{}},"projectId":"6981acd067f1cd5e41f0b174-6981a7f867f1cd5e41f0b120","msg":"KubernetesRunner error","time":"2026-02-16T07:35:02.980Z","v":0}
         }
       }
     )
-    // pas back the container name to allow it to be killed
+
     return name
   },
 
@@ -165,19 +153,15 @@ const KubernetesRunner = {
 
     try {
 
-      // launching job
       logger.info({ name }, 'Creating K8s job');
       this.runJob(options)
 
-      // Wait for Job
       const podName = await this._waitForJob(name);
       logger.info({ podName, timeout }, 'Pod found, waiting for completion')
       const exitCode = await this._waitForCompletion(podName);
 
-      // Get logs
       const logs = await this._getLogs(podName);
 
-      // Cleanup
       this.destroyJob(name, (err) => {
         if (err) {
           logger.warn({ err, name }, 'Failed to destroy job after compile')
@@ -185,14 +169,6 @@ const KubernetesRunner = {
           logger.debug({ name }, 'Job cleaned up after compile')
         }
       })
-
-      // , (err) => {
-      //   if (err) {
-      //     logger.warn({ err, name }, 'Failed to destroy job')
-      //   } else {
-      //     logger.debug({ name }, 'Job destroyed successfully')
-      //   }
-      // }
 
       callback(null, {
         exitCode: exitCode,
@@ -221,6 +197,7 @@ const KubernetesRunner = {
     const mountPath = "/compiles/"
     const subPath = options.directory
     //const subPath = `data/compiles/`${projectId}`
+
     const job = {
       apiVersion: 'batch/v1',
       kind: 'Job',
@@ -234,7 +211,7 @@ const KubernetesRunner = {
         }
       },
       spec: {
-        ttlSecondsAfterFinished: 60, // Can hinder new creation
+        ttlSecondsAfterFinished: 60,
         backoffLimit: 0,
         template: {
           spec: {
@@ -331,6 +308,7 @@ const KubernetesRunner = {
       }
 
       // Something causes the image to fail being pulled, but on retry it succeeds.
+      // NEEDS TO BE REFINED
       if (waiting?.reason === 'ImagePullBackOff') {
         logger.warn({ podName }, 'Image pull backing off, waiting for K8s retry...')
       }
@@ -467,8 +445,6 @@ KubernetesRunner.init()
 
 module.exports = KubernetesRunner;
 module.exports.promises = {
-  // run: (...args) => KubernetesRunner.run(...args),
-  // kill: (...args) => KubernetesRunner.kill(...args)
   run: promisify(KubernetesRunner.run),
   kill: promisify(KubernetesRunner.kill)
 }
