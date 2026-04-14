@@ -219,9 +219,12 @@ const KubernetesRunner = {
             securityContext: {
               fsGroupChangePolicy: "Always", 
               fsGroup: 33, 
-              seLinuxOptions: {
-                level: options.seLinuxLevel
-              }},
+              ...(options.seLinuxLevel && options.seLinuxLevel !== 'undefined' ? {
+                seLinuxOptions: { level: options.seLinuxLevel }
+              } : {})},
+              // seLinuxOptions: {
+              //   level: options.seLinuxLevel
+              // }},
             serviceAccountName: 'overleaf', // get account from current pod or from env variable
             containers: [{
               name: 'overleaf-compile',
@@ -377,9 +380,21 @@ const KubernetesRunner = {
 
   async _loadSELinuxConfig() {
     try {
-      const overleafPodName = process.env.POD_NAME || os.hostname() // environment variable is  not scalable!!
-      const pod = await this.coreApi.readNamespacedPod(overleafPodName, this.namespace);
-      this.seLinuxLevel = pod.body.spec?.securityContext?.seLinuxOptions?.level || pod.body.spec?.containers[0]?.securityContext?.seLinuxOptions?.level;
+      // const overleafPodName = process.env.POD_NAME || os.hostname() // environment variable is  not scalable!!
+      // const pod = await this.coreApi.readNamespacedPod(overleafPodName, this.namespace);
+      // this.seLinuxLevel = pod.body.spec?.securityContext?.seLinuxOptions?.level || pod.body.spec?.containers[0]?.securityContext?.seLinuxOptions?.level;
+      
+      // READ SELINUX FROM CURRENT CONTAINER
+      const raw = fs.readFileSync('/proc/self/attr/current', 'utf8').trim();
+      
+      // Remove trailing NULs explicitly
+      // /proc/self/attr/current trails invisible characters resulting in:
+      // example: s0:c268,c650\u0000
+      const label = raw.replace(/\0/g, '').trim();
+
+      const parts = label.split(':');
+      this.seLinuxLevel = parts.slice(3).join(':');
+
       logger.info({ seLinuxLevel: this.seLinuxLevel }, 'Loaded SELinux config from parent pod');
     } catch (err) {
       logger.warn({ err }, 'Could not load SELinux config, jobs may fail');
