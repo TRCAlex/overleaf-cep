@@ -349,8 +349,7 @@ const KubernetesRunner = {
     // rolling build does not follow our <year>.<version>.<patch> convention
     const year = match ? match[1] || match[2] : 'rolling'
 
-    // read selinuxoptions from pod security context
-    // needed for mapping volumes to multiple containers
+
     //const seLinuxLevel = process.env.SELINUX_OPTIONS_LEVEL
     env.PATH = `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/texlive/${year}/bin/x86_64-linux/`
     const options = {
@@ -378,6 +377,8 @@ const KubernetesRunner = {
     return options
   },
 
+  // read selinuxoptions from pod security context
+  // needed for mapping volumes to multiple containers
   async _loadSELinuxConfig() {
     try {
       // const overleafPodName = process.env.POD_NAME || os.hostname() // environment variable is  not scalable!!

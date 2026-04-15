@@ -102,11 +102,10 @@ Service account has to be in use by the overleaf pod as well.
     * "get", "list", "watch" on resource "pods"
     * "get" on resources "pods/logs" & "pods/status" 
 2. PersistentVolumeClaim with RWX for the overleaf pod to share data with job pods.
+  => In case of using NFS for Persistent Volumes, make sure www-data can write to the nfs share
 3. Environment variables on the overleaf pod:
-    * **POD_NAME** (required): name of the current overleaf pod; needed to read seLinuxOptions.  
-    **NOTE**: This restricts potential use of StatefulSets/scalability. Removing this ENV is WIP.
     * **SANDBOXED_COMPILES**: set "true" to enable sandboxed compiles
-    * **KUBERNETES_RUNNER**: set "true" to enable usage of Kubernetes Jobs as sandboxes. Alternative options is **DOCKER_RUNNER**.
+    * **KUBERNETES_RUNNER**: set "true" to enable usage of Kubernetes Jobs as sandboxes. Alternative option is **DOCKER_RUNNER**.
     * **SANDBOXED_COMPILES_HOST_DIR** (required): path to the compiles/ dir relative to the PVC mountpoint.  
     example: PVC mountPath = /var/lib/overleaf/ => SANDBOXED_COMPILES_HOST_DIR = data/compiles/
     * **SANDBOXED_COMPILES_HOST_DIR_OUTPUT** (required): path to the output/ dir relative to the PVC mountpoint.  
